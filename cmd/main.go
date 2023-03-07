@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/profiles/database"
 	"github.com/profiles/server"
@@ -37,8 +40,25 @@ func main() {
 
 	server := server.NewServer(config, listener, userService)
 
-	err = server.Run(ctx)
-	if err != nil {
-		logrus.Fatalf("%s", err.Error())
+	go func() {
+		if err := server.Run(ctx); err != nil {
+			logrus.Fatalf("error occured while running http server: %s", err.Error())
+		}
+	}()
+
+	logrus.Print("app started")
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+
+	logrus.Print("app shutting down")
+
+	if err := server.Close(); err != nil {
+		logrus.Errorf("error occured on server shutting down: %s", err.Error())
+	}
+
+	if err := db.Close(); err != nil {
+		logrus.Errorf("error occured on db connection close: %s", err.Error())
 	}
 }
